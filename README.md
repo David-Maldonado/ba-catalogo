@@ -10,5 +10,7 @@
 4. Configurar las variables de entorno en el archivo .env
 5. Levantar la base de datos
 ``` docker-compose up -d ```
-6. Correr el proyecto
+6. Ejecutar SEED
+``` localhost:3001/api/seed ```
+7. Correr el proyecto
 ``` npm run start:dev ```
