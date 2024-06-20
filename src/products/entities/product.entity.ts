@@ -4,7 +4,9 @@ import {
   Column,
   BeforeInsert,
   BeforeUpdate,
+  OneToMany,
 } from 'typeorm';
+import { ProductImage } from './product-image.entity';
 @Entity()
 export class Product {
   @PrimaryGeneratedColumn('uuid')
@@ -35,6 +37,12 @@ export class Product {
   // tags se insertaron dps., si esta en cincronizado, puede ir dar error hasta definir bien la columna
   @Column('text', { array: true, default: [] })
   tags: string[];
+  //un producto puede tener varias imagenes entones OneToMany
+  @OneToMany(() => ProductImage, (productImage) => productImage.product, {
+    cascade: true,
+    eager: true,
+  })
+  images?: ProductImage[];
 
   @BeforeInsert()
   checSlugInsert() {

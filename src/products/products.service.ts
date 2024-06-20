@@ -8,10 +8,11 @@ import {
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Product } from './entities/product.entity';
+import { Repository, DataSource } from 'typeorm';
 import { PaginationDto } from 'src/common/dtos/pagination.dto';
 import { validate as isUUID } from 'uuid';
+import { Product, ProductImage } from './entities';
+import { error } from 'console';
 
 @Injectable()
 export class ProductsService {
@@ -20,25 +21,45 @@ export class ProductsService {
   constructor(
     @InjectRepository(Product)
     private readonly productRepository: Repository<Product>,
+    @InjectRepository(ProductImage)
+    private readonly productImageRepository: Repository<ProductImage>,
+    // Datasource es propio de typeorm, entre otras cosas tiene info de la cadana de conex, usuario, etc
+    private readonly dataSource: DataSource,
     // si se necesita otro repositorio se inyecta de la misma forma
   ) {}
   async create(createProductDto: CreateProductDto) {
     try {
-      const newProduct = this.productRepository.create(createProductDto);
+      const { images = [], ...productDetails } = createProductDto;
+
+      const newProduct = this.productRepository.create({
+        ...productDetails,
+        images: images.map((image) =>
+          this.productImageRepository.create({ url: image }),
+        ),
+      });
       await this.productRepository.save(newProduct);
-      return newProduct;
+      return { ...newProduct, images };
     } catch (error) {
       this.handleDBException(error);
     }
   }
-  // todo: implementar paginacion
-  findAll(paginationDto: PaginationDto) {
+
+  async findAll(paginationDto: PaginationDto) {
     const { limit = 10, offset = 0 } = paginationDto;
     try {
-      return this.productRepository.find({
+      const product = await this.productRepository.find({
         take: limit,
         skip: offset,
+        //relaciones.
+        relations: {
+          images: true,
+        },
       });
+      // "aplanar imagenes"
+      return product.map((product) => ({
+        ...product,
+        images: product.images.map((img) => img.url),
+      }));
     } catch (error) {
       this.handleDBException(error);
     }
@@ -49,11 +70,15 @@ export class ProductsService {
     if (isUUID(term)) {
       product = await this.productRepository.findOneBy({ id: term });
     } else {
-      const queryBuilder = this.productRepository.createQueryBuilder('product');
-      queryBuilder.where('title ILIKE :term or slug ILIKE :term', {
-        term: `%${term}%`,
-      });
-      product = await queryBuilder.getOne();
+      const queryBuilder = this.productRepository.createQueryBuilder('prod');
+      product = await queryBuilder
+        .where('UPPER(title) =:title or slug =:slug', {
+          title: term.toUpperCase(),
+          slug: term.toLowerCase(),
+        })
+        //prodImages es un alias por si se necesite hacer otros joins. prod se le llama a la tabla (ver, porque no se llama asi en la db, es como un alias)
+        .leftJoinAndSelect('prod.images', 'prodImages')
+        .getOne();
     }
 
     if (!product)
@@ -61,17 +86,59 @@ export class ProductsService {
     return product;
   }
 
+  //metodo para "aplanar get por term"
+
+  async findOntPlain(term: string) {
+    const { images = [], ...rest } = await this.findOne(term);
+    return {
+      ...rest,
+      images: images.map((image) => image.url),
+    };
+  }
+
   async update(id: string, updateProductDto: UpdateProductDto) {
+    const { images, ...toUpdate } = updateProductDto;
+
     const product = await this.productRepository.preload({
-      id: id,
-      ...updateProductDto,
+      id,
+      ...toUpdate,
     });
 
     if (!product) throw new NotFoundException(`Product  with  ${id} not found`);
 
+    //evaluar si tiene imagenes.
+
+    //Create query runner. (ver más info)
+    const queryRunner = this.dataSource.createQueryRunner();
+
+    await queryRunner.connect();
+    //trabajando con transacciones., si falla hacemos rollback o si no, hacemos el commit.
+    await queryRunner.startTransaction();
+
     try {
-      return await this.productRepository.save(product);
+      //si se actualizan y tiene imagenes, se eliminan las anteriores y se insertan las nuevas.
+      if (images) {
+        // ver documentacion sobre softdelete (es como para hacer un borrado lógico)
+        await queryRunner.manager.delete(ProductImage, { product: { id } });
+
+        product.images = images.map((image) =>
+          this.productImageRepository.create({ url: image }),
+        );
+      }
+
+      await queryRunner.manager.save(product);
+
+      await queryRunner.commitTransaction();
+
+      await queryRunner.release();
+
+      //? código anterior sin usar transacciones: await this.productRepository.save(product);
+      return this.findOntPlain(id);
     } catch (error) {
+      // se puede usar aquí porque el transaction se crea fuera del try
+      await queryRunner.rollbackTransaction();
+      await queryRunner.release();
+
       this.handleDBException(error);
     }
   }
@@ -92,5 +159,17 @@ export class ProductsService {
     this.logger.error(error);
 
     throw new InternalServerErrorException('Unexpected error, check logs');
+  }
+
+  //para desarrollo o eliminar los seeds
+
+  async deleteAllProducts() {
+    const query = this.productRepository.createQueryBuilder('product');
+
+    try {
+      return await query.delete().where({}).execute();
+    } catch (error) {
+      this.handleDBException(error);
+    }
   }
 }
