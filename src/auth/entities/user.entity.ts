@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column  } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, BeforeInsert, BeforeUpdate  } from 'typeorm';
 @Entity('users')
 export class User {
     @PrimaryGeneratedColumn('uuid')
@@ -6,8 +6,10 @@ export class User {
 
     @Column('text', {unique:true})
     email:string;
-
-    @Column('text')
+    //para que no devuelva o muestre el pass
+    @Column('text', {
+        select:false
+    })
     password:string;
 
     @Column('text')
@@ -23,4 +25,16 @@ export class User {
         default: ['user']
     })
     roles: string[]
+
+    @BeforeInsert()
+    checkFieldsBeforeInsert(){
+        this.email = this.email.toLocaleLowerCase().trim();
+    }
+
+    @BeforeInsert()
+    checkFieldsBeforeUpdate(){
+        this.checkFieldsBeforeInsert()
+    }
+
+    
 }
