@@ -1,4 +1,5 @@
-import { Entity, PrimaryGeneratedColumn, Column, BeforeInsert, BeforeUpdate  } from 'typeorm';
+import { Product } from 'src/products/entities';
+import { Entity, PrimaryGeneratedColumn, Column, BeforeInsert, OneToMany  } from 'typeorm';
 @Entity('users')
 export class User {
     @PrimaryGeneratedColumn('uuid')
@@ -22,9 +23,16 @@ export class User {
 
     @Column('text', {
         array:true,
-        default: ['user']
+        default: ['admin']
     })
     roles: string[]
+
+    @OneToMany(
+        () => Product,
+        (product) => product.user,
+        {cascade: true}
+    )
+    products: Product
 
     @BeforeInsert()
     checkFieldsBeforeInsert(){
