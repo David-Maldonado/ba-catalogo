@@ -10,11 +10,15 @@ import {
   Query,
 } from '@nestjs/common';
 import { ProductsService } from './products.service';
+import { ApiTags, ApiResponse } from '@nestjs/swagger';
 import { CreateProductDto, UpdateProductDto } from './dto';
 import { PaginationDto } from 'src/common/dtos/pagination.dto';
 import { Auth, GetUser } from 'src/auth/decorators';
 import { User } from 'src/auth/entities/user.entity';
+import { Product } from './entities';
 
+
+@ApiTags('Products')
 @Controller('products')
 //@Auth() --- // de manera global para todos los metodos, se puede sobreescribir en cada metodo
 export class ProductsController {
@@ -22,6 +26,12 @@ export class ProductsController {
 
   @Post()
   @Auth()
+  @ApiResponse({ status: 201, description: 'Product was created', type: Product})
+  @ApiResponse({ status: 400, description: 'Bad request' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+
+
   create(
     @Body() createProductDto: CreateProductDto,
     @GetUser() user: User, // decorador para obtener el usuario autenticado

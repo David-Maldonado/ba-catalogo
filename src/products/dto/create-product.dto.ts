@@ -8,8 +8,14 @@ import {
   IsString,
   MinLength,
 } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateProductDto {
+  @ApiProperty({
+    description: 'The title of the product',
+    example: 'Nike Air Max 90',
+    uniqueItems: false,
+  })
   @IsString()
   @MinLength(1)
   title: string;
