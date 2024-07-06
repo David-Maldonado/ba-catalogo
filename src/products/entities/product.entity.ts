@@ -5,8 +5,10 @@ import {
   BeforeInsert,
   BeforeUpdate,
   OneToMany,
+  ManyToOne
 } from 'typeorm';
 import { ProductImage } from './product-image.entity';
+import { User } from 'src/auth/entities/user.entity';
 @Entity()
 export class Product {
   @PrimaryGeneratedColumn('uuid')
@@ -44,6 +46,14 @@ export class Product {
   })
   images?: ProductImage[];
 
+
+
+  @ManyToOne(
+    () => User,
+    (user) => user.products,
+    { eager: true} // eager true para que traiga el usuario
+  )
+  user: User;
   @BeforeInsert()
   checSlugInsert() {
     if (!this.slug) {
